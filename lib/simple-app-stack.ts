@@ -8,6 +8,8 @@ import {movies} from "../seed/movies";
 
 
 import { Construct } from 'constructs';
+import { ScanCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
 export class SimpleAppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -57,12 +59,32 @@ export class SimpleAppStack extends cdk.Stack {
         allowedOrigins: ["*"],
       },
     });
-
     moviesTable.grantReadData(getMovieByIdFn)
 
     new cdk.CfnOutput(this, "Get Movie Function Url", { value: getMovieByIdURL.url });
 
+    const getAllMoviesFn = new lambdanode.NodejsFunction(
+      this,
+      "GetAllMoviesFn",{
+        architecture: lambda.Architecture.ARM_64,
+        runtime: lambda.Runtime.NODEJS_22_X,
+        entry: `${__dirname}/../lambdas/getAllMovies.ts`,
+        timeout: cdk.Duration.seconds(10),
+        memorySize: 128,
+        environment: {
+          TABLE_NAME: moviesTable.tableName,
+          REGION: cdk.Aws.REGION,
+        },
+      });
 
+    moviesTable.grantReadData(getAllMoviesFn)
+
+    const getAllMoviesURL = getAllMoviesFn.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.NONE,
+      cors:{allowedOrigins: ["*"]},
+    });
+
+    new cdk.CfnOutput(this, "Get All Movies Function Url", {value: getAllMoviesURL.url});
 
     // This just populates the table with movies from seed folder
     new custom.AwsCustomResource(this, "moviesddbInitData", {
